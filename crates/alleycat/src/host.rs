@@ -246,6 +246,7 @@ pub fn pair_payload(
         token: config.token.clone(),
         host_name: local_host_name(),
         relay: endpoint_home_relay(endpoint).or_else(|| config.relay.clone()),
+        direct_addresses: endpoint_direct_addresses(endpoint),
     }
 }
 
@@ -258,6 +259,17 @@ pub fn endpoint_home_relay(endpoint: Option<&Endpoint>) -> Option<String> {
         .relay_urls()
         .next()
         .map(|url| url.to_string())
+}
+
+pub fn endpoint_direct_addresses(endpoint: Option<&Endpoint>) -> Vec<String> {
+    let Some(endpoint) = endpoint else {
+        return Vec::new();
+    };
+    direct_addresses_from_endpoint_addr(&endpoint.addr())
+}
+
+fn direct_addresses_from_endpoint_addr(addr: &iroh::EndpointAddr) -> Vec<String> {
+    addr.ip_addrs().map(|addr| addr.to_string()).collect()
 }
 
 fn local_host_name() -> Option<String> {
@@ -309,12 +321,25 @@ mod tests {
         assert_eq!(payload.node_id, secret_key.public().to_string());
         assert_eq!(payload.token, "token-1");
         assert_eq!(payload.relay.as_deref(), Some("https://relay.example"));
+        assert!(payload.direct_addresses.is_empty());
         assert!(
             payload
                 .host_name
                 .as_deref()
                 .is_some_and(|name| !name.is_empty())
         );
+    }
+
+    #[test]
+    fn direct_addresses_from_endpoint_addr_ignores_relay_urls() {
+        let id = iroh::SecretKey::generate().public();
+        let addr = iroh::EndpointAddr::new(id)
+            .with_relay_url("https://relay.example".parse().expect("relay"))
+            .with_ip_addr("10.255.215.120:63961".parse().expect("socket"));
+
+        let direct_addresses = direct_addresses_from_endpoint_addr(&addr);
+
+        assert_eq!(direct_addresses, vec!["10.255.215.120:63961"]);
     }
 
     #[test]
