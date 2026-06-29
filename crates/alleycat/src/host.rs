@@ -82,6 +82,7 @@ pub async fn accept_loop(
                 };
                 let agents = agents.clone();
                 let config = Arc::clone(&config);
+                let endpoint = endpoint.clone();
                 tokio::spawn(async move {
                     match connecting.await {
                         Ok(conn) => {
@@ -98,10 +99,11 @@ pub async fn accept_loop(
                             while let Ok((send, recv)) = conn.accept_bi().await {
                                 let agents = agents.clone();
                                 let config = Arc::clone(&config);
+                                let endpoint = endpoint.clone();
                                 let node_id = node_id.clone();
                                 tokio::spawn(async move {
                                     if let Err(error) = handle_stream(
-                                        send, recv, agents, config, conn_id, node_id,
+                                        send, recv, agents, config, endpoint, conn_id, node_id,
                                     )
                                     .await
                                     {
@@ -125,6 +127,7 @@ async fn handle_stream(
     mut recv: iroh::endpoint::RecvStream,
     agents: AgentManager,
     config: Arc<ArcSwap<HostConfig>>,
+    endpoint: Endpoint,
     conn: usize,
     node_id: String,
 ) -> anyhow::Result<()> {
@@ -145,7 +148,9 @@ async fn handle_stream(
         Request::ListAgents { .. } => {
             info!(conn = conn, "list_agents");
             let list = agents.list_agents().await;
-            write_json_frame(&mut send, &Response::agents(list)).await?;
+            let response = Response::agents(list)
+                .with_direct_addresses(endpoint_direct_addresses(Some(&endpoint)));
+            write_json_frame(&mut send, &response).await?;
             Ok(())
         }
         Request::RestartAgent { agent, .. } => {
@@ -207,7 +212,9 @@ async fn handle_stream(
                 floor_seq = session_info.floor_seq,
                 "connect: dispatching to agent"
             );
-            write_json_frame(&mut send, &Response::ok_with_session(session_info.clone())).await?;
+            let response = Response::ok_with_session(session_info.clone())
+                .with_direct_addresses(endpoint_direct_addresses(Some(&endpoint)));
+            write_json_frame(&mut send, &response).await?;
             // The registry already decided what cursor to actually replay from —
             // either the client's explicit resume hint, or the server's own
             // `last_attempted_seq` for a known session attaching without one.

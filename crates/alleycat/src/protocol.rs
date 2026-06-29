@@ -190,6 +190,8 @@ pub struct Response {
     pub agents: Option<Vec<AgentInfo>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<SessionInfo>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub direct_addresses: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -201,6 +203,7 @@ impl Response {
             ok: true,
             agents: None,
             session: None,
+            direct_addresses: Vec::new(),
             error: None,
         }
     }
@@ -211,6 +214,7 @@ impl Response {
             ok: true,
             agents: None,
             session: Some(session),
+            direct_addresses: Vec::new(),
             error: None,
         }
     }
@@ -221,6 +225,7 @@ impl Response {
             ok: true,
             agents: Some(agents),
             session: None,
+            direct_addresses: Vec::new(),
             error: None,
         }
     }
@@ -231,7 +236,35 @@ impl Response {
             ok: false,
             agents: None,
             session: None,
+            direct_addresses: Vec::new(),
             error: Some(error.into()),
         }
+    }
+
+    pub fn with_direct_addresses(mut self, direct_addresses: Vec<String>) -> Self {
+        self.direct_addresses = direct_addresses;
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn response_agents_carries_direct_addresses() {
+        let response = Response::agents(Vec::new())
+            .with_direct_addresses(vec!["10.82.25.233:58510".to_string()]);
+
+        let json = serde_json::to_string(&response).expect("serialize response");
+        assert!(json.contains("direct_addresses"));
+        let decoded: Response = serde_json::from_str(&json).expect("decode response");
+        assert_eq!(decoded.direct_addresses, vec!["10.82.25.233:58510"]);
+    }
+
+    #[test]
+    fn response_omits_empty_direct_addresses() {
+        let json = serde_json::to_string(&Response::ok()).expect("serialize response");
+        assert!(!json.contains("direct_addresses"));
     }
 }
